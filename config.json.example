@@ -1,0 +1,10 @@
+{
+    "authority": "https://login.microsoftonline.com/common",
+    "client_id": "<CLIENT_ID>",
+    "scope": [
+        "User.Read",
+        "Notes.Read",
+        "Notes.Read.All"
+    ],
+    "endpoint": "https://graph.microsoft.com/v1.0/me"
+}
