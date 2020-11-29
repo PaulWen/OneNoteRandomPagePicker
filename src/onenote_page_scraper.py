@@ -17,15 +17,22 @@ class OneNotePageSpider(scrapy.Spider):
 
     def parse(self, response):
         sections = json.loads(response.text)
-        yield scrapy.Request(url=sections["value"][0]["pagesUrl"], method="GET", headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_pages)
+        sectionInfo = {
+            "sectionName": sections["value"][0]["displayName"],
+            "notebookName": sections["value"][0]["parentNotebook"]["displayName"]
+        }
+        yield scrapy.Request(meta={"sectionInfo": sectionInfo}, url=sections["value"][0]["pagesUrl"], method="GET", headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_pages)
         # for section in sections["value"]:
         #     yield scrapy.Request(url=section["pagesUrl"], method="GET", headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_pages)
 
     def parse_pages(self, response):
+        sectionInfo = response.meta["sectionInfo"]
         pages = json.loads(response.text)
 
         for page in pages["value"]:
             yield {
                 'pageName': page["title"],
-                'pageOneNoteClientUrl': page["links"]["oneNoteClientUrl"]["href"]
+                'pageOneNoteClientUrl': page["links"]["oneNoteClientUrl"]["href"],
+                'parentSectionName': sectionInfo["sectionName"],
+                'notebookName': sectionInfo["notebookName"]
             }
