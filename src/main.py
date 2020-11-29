@@ -20,7 +20,13 @@ accessToken = auth.retrieveAccessToken()
 process = CrawlerProcess({
     'USER_AGENT': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)',
     'FEED_FORMAT': 'json',
-    'FEED_URI': 'result.json'
+    'FEED_URI': 'result.json',
+    'CONCURRENT_REQUESTS_PER_DOMAIN': 4,
+    'RETRY_HTTP_CODES': [429],
+    'DOWNLOADER_MIDDLEWARES': {
+        'scrapy.downloadermiddlewares.retry.RetryMiddleware': None, # deactivate default middleware
+        'onenote_page_scraper.TooManyRequestsRetryMiddleware': 543 # activate custom middleware for retries (543 is the priority of this middleware)
+    }
 })
 
 process.crawl(onenote.OneNotePageSpider, accessToken)

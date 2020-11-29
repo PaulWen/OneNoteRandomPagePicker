@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 import json
+import time
 
 import scrapy
+from scrapy.downloadermiddlewares.retry import RetryMiddleware
+from scrapy.utils.response import response_status_message
 
 
 class OneNotePageSpider(scrapy.Spider):
@@ -21,9 +24,9 @@ class OneNotePageSpider(scrapy.Spider):
             "sectionName": sections["value"][0]["displayName"],
             "notebookName": sections["value"][0]["parentNotebook"]["displayName"]
         }
-        yield scrapy.Request(meta={"sectionInfo": sectionInfo}, url=sections["value"][0]["pagesUrl"], method="GET", headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_pages)
-        # for section in sections["value"]:
-        #     yield scrapy.Request(url=section["pagesUrl"], method="GET", headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_pages)
+        # yield scrapy.Request(meta={"sectionInfo": sectionInfo}, url=sections["value"][0]["pagesUrl"], method="GET", headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_pages)
+        for section in sections["value"]:
+            yield scrapy.Request(meta={"sectionInfo": sectionInfo}, url=section["pagesUrl"], method="GET", headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_pages)
 
     def parse_pages(self, response):
         sectionInfo = response.meta["sectionInfo"]
@@ -36,3 +39,28 @@ class OneNotePageSpider(scrapy.Spider):
                 'parentSectionName': sectionInfo["sectionName"],
                 'notebookName': sectionInfo["notebookName"]
             }
+
+
+class TooManyRequestsRetryMiddleware(RetryMiddleware):
+
+    def __init__(self, crawler):
+        super(TooManyRequestsRetryMiddleware, self).__init__(crawler.settings)
+        self.crawler = crawler
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        return cls(crawler)
+
+    def process_response(self, request, response, spider):
+        if request.meta.get('dont_retry', False):
+            return response
+        elif response.status == 429:
+            self.crawler.engine.pause()
+            time.sleep(60) # If the rate limit is renewed in a minute, put 60 seconds, and so on.
+            self.crawler.engine.unpause()
+            reason = response_status_message(response.status)
+            return self._retry(request, reason, spider) or response
+        elif response.status in self.retry_http_codes:
+            reason = response_status_message(response.status)
+            return self._retry(request, reason, spider) or response
+        return response 
