@@ -53,11 +53,7 @@ You'll need to install the dependencies using pip as follows:
 
 ```Shell
 pip3 install msal requests
-```
-
-If the sample fails to run or is outdated, you can try installing the version specific dependencies from requirements.txt.
-
-```Shell
+pip3 install scrapy
 pip3 install -r requirements.txt
 ```
 
@@ -73,3 +69,5 @@ Start the application, follow the instructions and use a browser to authenticate
 ```Shell
 python ./src/main.py config.json
 ```
+
+[test](onenote:https://d.docs.live.net/f0de44f4fc9b51b6/One%20Note/PARA%20OneNote/Erfolg^J%20Produktivit%c3%a4t%20und%20Gl%c3%bccklichkeit/%C3%84ngste%2C%20Herasforderungen%2C%20Probleme%20und%20Scheitern.one#Herausforderungen%20und%20%C3%84ngste&section-id=ffd3291e-9557-124d-aca6-89ab155fb4c9&page-id=760107ac-acbd-664c-8ed1-8b7ee51da848&end)

@@ -103,5 +103,7 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+# project specific excludes
 config.json
 token_cache.bin
+result.json
