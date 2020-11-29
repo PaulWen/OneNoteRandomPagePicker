@@ -6,7 +6,7 @@ import sys  # For simplicity, we'll read config file from 1st CLI param sys.argv
 
 import msal
 
-#logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 config = json.load(open(sys.argv[1]))
 
 # SerializableTokenCache: https://msal-python.rtfd.io/en/latest/#msal.SerializableTokenCache
@@ -14,19 +14,13 @@ tokenCache = msal.SerializableTokenCache()
 if os.path.exists("token_cache.bin"):
     tokenCache.deserialize(open("token_cache.bin", "r").read())
 
-atexit.register(lambda:
-    open("token_cache.bin", "w").write(tokenCache.serialize())
-    if tokenCache.has_state_changed else None
-    )
-
 app = msal.PublicClientApplication(
     config["client_id"], authority=config["authority"],
     token_cache=tokenCache
     )
 
-result = None
-
 def retrieveAccessToken():
+    result = None
     accounts = app.get_accounts()
     if accounts:
         account = accounts[0]
@@ -50,6 +44,7 @@ def retrieveAccessToken():
             # and then keep calling acquire_token_by_device_flow(flow) in your own customized loop.
 
     if "access_token" in result:
+        open("token_cache.bin", "w").write(tokenCache.serialize())
         return result['access_token']
     else:
         print(result.get("error"))
