@@ -43,10 +43,10 @@ with open('lastSyncDate.txt', "r") as file:
      if lastSyncDate:
         lastSyncDate = datetime.strptime(str(lastSyncDate), '%Y-%m-%d %H:%M:%S')
 
-process.crawl(scraper.OneNotePageSpider, accessToken, allAlfredData, lastSyncDate)
-process.start() # the script will block here until the crawling is finished
-
 with open("lastSyncDate.txt", mode='w') as file:
     file.write(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+
+process.crawl(scraper.OneNotePageSpider, accessToken, allAlfredData, lastSyncDate)
+process.start() # the script will block here until the crawling is finished
 
 print("Done")
