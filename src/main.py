@@ -1,11 +1,13 @@
 import json
 import sys
+from datetime import datetime
 
 import requests
 from scrapy.crawler import CrawlerProcess
 
 import microsoft_graph_device_flow as auth
-import onenote_page_scraper as onenote
+import onenote_page_scraper as scraper
+import onenote_types as types
 
 config = json.load(open(sys.argv[1]))
 
@@ -29,7 +31,22 @@ process = CrawlerProcess({
     }
 })
 
-process.crawl(onenote.OneNotePageSpider, accessToken)
+allAlfredData = []
+with open('onenoteElements.json', "r") as file:
+    data = json.load(file)
+    for element in data:
+        allAlfredData.append(types.as_onenoteelement(element))
+
+lastSyncDate=""
+with open('lastSyncDate.txt', "r") as file:
+     lastSyncDate = file.read()
+     if lastSyncDate:
+        lastSyncDate = datetime.strptime(str(lastSyncDate), '%Y-%m-%d %H:%M:%S')
+
+process.crawl(scraper.OneNotePageSpider, accessToken, allAlfredData, lastSyncDate)
 process.start() # the script will block here until the crawling is finished
+
+with open("lastSyncDate.txt", mode='w') as file:
+    file.write(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
 print("Done")

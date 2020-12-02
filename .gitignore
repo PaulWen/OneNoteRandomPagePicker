@@ -107,3 +107,5 @@ venv.bak/
 config.json
 token_cache.bin
 result.json
+onenoteElements.json
+lastSyncDate.txt

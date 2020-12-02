@@ -70,4 +70,12 @@ Start the application, follow the instructions and use a browser to authenticate
 python ./src/main.py config.json
 ```
 
-[test](onenote:https://d.docs.live.net/f0de44f4fc9b51b6/One%20Note/PARA%20OneNote/Erfolg^J%20Produktivit%c3%a4t%20und%20Gl%c3%bccklichkeit/%C3%84ngste%2C%20Herasforderungen%2C%20Probleme%20und%20Scheitern.one#Herausforderungen%20und%20%C3%84ngste&section-id=ffd3291e-9557-124d-aca6-89ab155fb4c9&page-id=760107ac-acbd-664c-8ed1-8b7ee51da848&end)
+## Documentation
+
+-   the scraper ignores notebooks which include `(Archiv)` in their name as those are
+    considered to be archived
+-   the file `onenoteElements.json` includes all the scraped OneNote elements
+    -   OneNote elements are: notebooks, sections, section groups, pages
+    -   the file `onenoteElements.json` can not be empty but at least has to include "[]"
+-   the file `lastSyncDate.txt` stores the datetime of the last sync with OneNote
+    -   if this file is empty, all data will be synced

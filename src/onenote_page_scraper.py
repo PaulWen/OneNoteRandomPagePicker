@@ -1,19 +1,41 @@
 # -*- coding: utf-8 -*-
 import json
 import time
+from datetime import datetime
 
 import scrapy
 from scrapy.downloadermiddlewares.retry import RetryMiddleware
 from scrapy.utils.response import response_status_message
 
+import onenote_types as types
+
 
 class OneNotePageSpider(scrapy.Spider):
-    name = 'OneNotePage'
-    allowed_domains = ['graph.microsoft.com']
-    accessToken=''
 
-    def __init__(self, accessToken):
+    def __init__(self, accessToken, allAlfredData: [types.OneNoteElement], lastSyncDate):
+        self.name = 'OneNotePage'
+        self.allowed_domains = ['graph.microsoft.com']
         self.accessToken = accessToken
+        self.allAlfredData = allAlfredData
+        self.lastSyncDate = lastSyncDate if type(lastSyncDate) is datetime else datetime(2000, 1, 1)
+        self.alfredDataDictionary = self.genarateDictionaryFromList(self.allAlfredData)
+        self.alfredParentChildDictionary = self.genarateParentChildDictionaryFromList(self.allAlfredData)
+
+    def genarateDictionaryFromList(self, allAlfredData: [types.OneNoteElement]):
+        alfredDictionaryData = {}
+
+        for element in allAlfredData:
+            alfredDictionaryData[element.uid] = element
+
+        return alfredDictionaryData
+    
+    # def genarateParentChildDictionaryFromList(self, allAlfredData: [types.OneNoteElement]):
+    #     alfredParentChildDictionary = {}
+
+    #     for element in allAlfredData:
+    #         alfredParentChildDictionary[element.uid] = element
+
+    #     return alfredParentChildDictionary
     
     def start_requests(self):
         yield scrapy.Request(url='https://graph.microsoft.com/v1.0/me/onenote/sections',  method="GET", headers={"Authorization": "Bearer " + self.accessToken})
@@ -24,9 +46,12 @@ class OneNotePageSpider(scrapy.Spider):
             "sectionName": sections["value"][0]["displayName"],
             "notebookName": sections["value"][0]["parentNotebook"]["displayName"]
         }
-        # yield scrapy.Request(meta={"sectionInfo": sectionInfo}, url=sections["value"][0]["pagesUrl"], method="GET", headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_pages)
-        for section in sections["value"]:
-            yield scrapy.Request(meta={"sectionInfo": sectionInfo}, url=section["pagesUrl"], method="GET", headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_pages)
+        
+        # do only scrape notebooks which do not include "(Archiv)" in their name and
+        # therefore are not yet archived
+        if sectionInfo["notebookName"].find("(Archiv)") == -1:
+            for section in sections["value"]:
+                yield scrapy.Request(meta={"sectionInfo": sectionInfo}, url=section["pagesUrl"], method="GET", headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_pages)
 
     def parse_pages(self, response):
         sectionInfo = response.meta["sectionInfo"]
@@ -39,8 +64,7 @@ class OneNotePageSpider(scrapy.Spider):
                 'parentSectionName': sectionInfo["sectionName"],
                 'notebookName': sectionInfo["notebookName"]
             }
-
-
+    
 class TooManyRequestsRetryMiddleware(RetryMiddleware):
 
     def __init__(self, crawler):
