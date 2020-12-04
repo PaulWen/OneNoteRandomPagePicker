@@ -29,13 +29,16 @@ class OneNotePageSpider(scrapy.Spider):
 
         return alfredDictionaryData
     
-    # def genarateParentChildDictionaryFromList(self, allAlfredData: [types.OneNoteElement]):
-    #     alfredParentChildDictionary = {}
+    def genarateParentChildDictionaryFromList(self, allAlfredData: [types.OneNoteElement]):
+        alfredParentChildDictionary = {}
 
-    #     for element in allAlfredData:
-    #         alfredParentChildDictionary[element.uid] = element
+        for element in allAlfredData:
+            if element.parentUid not in alfredParentChildDictionary:
+                alfredParentChildDictionary[element.parentUid] = []
+            
+            alfredParentChildDictionary[element.parentUid].append(element.uid)
 
-    #     return alfredParentChildDictionary
+        return alfredParentChildDictionary
     
     def start_requests(self):
         yield scrapy.Request(url='https://graph.microsoft.com/v1.0/me/onenote/sections',  method="GET", headers={"Authorization": "Bearer " + self.accessToken})
