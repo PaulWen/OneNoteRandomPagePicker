@@ -10,6 +10,7 @@ from scrapy.utils.response import response_status_message
 import onenote_types as types
 
 PARENT_UID_KEY = "parentUid"
+ONENOTE_TYPE_KEY = "onenoteType"
 NOTEBOOKS_KEY = "notebooks"
 
 class OneNotePageSpider(scrapy.Spider):
@@ -48,83 +49,29 @@ class OneNotePageSpider(scrapy.Spider):
         return alfredParentChildDictionary
 
     def start_requests(self):
-        yield scrapy.Request(meta={PARENT_UID_KEY: NOTEBOOKS_KEY}, url='https://graph.microsoft.com/v1.0/me/onenote/notebooks', method="GET",
-                             headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_notebooks)
+        yield scrapy.Request(meta={PARENT_UID_KEY: NOTEBOOKS_KEY, ONENOTE_TYPE_KEY: types.OneNoteType.NOTEBOOK}, url='https://graph.microsoft.com/v1.0/me/onenote/notebooks', method="GET",
+                             headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_onenote_elements)
 
-    def parse_notebooks(self, response):
-        notebooks = json.loads(response.text)["value"]
-
-        # check if any notebooks have been deleted
-        notbookUids = set()
-        for notebook in notebooks:
-            notbookUids.add(notebook["id"])
-
-        deletedNotebooks = self.alfredParentChildDictionary[NOTEBOOKS_KEY] - notbookUids
-
-        # remove deleted notebooks and all the child elements from the
-        # alfredDataDictionary
-        self.delete_recursively(deletedNotebooks)
-
-        for notebook in notebooks:
-            # do only scrape notebooks which do not include "(Archiv)" in their name and
-            # therefore are not yet archived
-            if notebook["displayName"].find("(Archiv)") > -1:
-                continue
-
-            # do only scrape notebooks which have been updated since the last sync
-            lastModified = self.parse_datetime(notebook["lastModifiedDateTime"])
-            if lastModified < self.lastSyncDate:
-                continue
-
-            # add/replace notebook element in data
-            self.alfredDataDictionary[notebook["id"]] = types.OneNoteElement(
-                    notebook['displayName'],
-                    notebook['displayName'],
-                    notebook['id'],
-                    notebook['displayName'],
-                    notebook['links']['oneNoteClientUrl'],
-                    "icons/notebook.png",
-                    "file",
-                    types.OneNoteType.NOTEBOOK,
-                    None
-                ) 
-
-            # scrape children
-            yield scrapy.Request(url=notebook["sectionGroupsUrl"], method="GET",
-                                 headers={"Authorization": "Bearer " + self.accessToken},
-                                 callback=self.parse_section_groups)
-            yield scrapy.Request(url=notebook["sectionsUrl"], method="GET",
-                                 headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_sections)
-    
     '''
     Can be used to parse one type of onenote elements (e.g. notebook, section, section
     group, page). The function syncs the data with the current set of data. 
     '''
     def parse_onenote_elements(self, response):
         parentUid = response.meta[PARENT_UID_KEY]
+        childOnenoteType = response.meta[ONENOTE_TYPE_KEY]
         children = json.loads(response.text)["value"]
 
-        deletedChildren = self.identify_deleted_elements(parentUid, children)
+        deletedChildren = self.identify_deleted_children(parentUid, children)
         self.delete_recursively(deletedChildren)
 
         modifiedChildren = self.identify_modified_children(children)
 
         for child in modifiedChildren:
-            # add/replace element in data
-            self.alfredDataDictionary[child["id"]] = types.OneNoteElement(
-                    notebook['displayName'],
-                    notebook['displayName'],
-                    notebook['id'],
-                    notebook['displayName'],
-                    notebook['links']['oneNoteClientUrl'],
-                    "icons/notebook.png",
-                    "file",
-                    types.OneNoteType.NOTEBOOK,
-                    None
-                ) 
+            self.update_modified_element(childOnenoteType, child, parentUid)
+            scrape_child_request = self.scrape_children(child)
+            for request in scrape_child_request:
+                yield request
 
-            # scrape children
-            self.scrape_children(child)
 
     '''
     This function detects all the deleted children of a parent.
@@ -136,7 +83,9 @@ class OneNotePageSpider(scrapy.Spider):
         for child in children:
             childrenUids.add(child["id"])
 
-        deletedElements = self.alfredParentChildDictionary[parentUid] - childrenUids
+        pastChildrenUids = self.alfredParentChildDictionary[parentUid] if None else set()
+
+        deletedElements = pastChildrenUids - childrenUids
 
         return deletedElements
 
@@ -149,7 +98,7 @@ class OneNotePageSpider(scrapy.Spider):
          for child in children:
             # do only scrape elements which do not include "(Archiv)" in their name and
             # therefore are not yet archived
-            if child["displayName"].find("(Archiv)") > -1:
+            if "(Archiv)".find(self.extract_title(child)) > -1:
                 continue
 
             # do only scrape elements which have been updated since the last sync
@@ -164,100 +113,87 @@ class OneNotePageSpider(scrapy.Spider):
     '''
     def scrape_children(self, parent):
         if "sectionGroupsUrl" in parent:
-            yield scrapy.Request(meta={PARENT_UID_KEY: parent["id"]}, url=parent["sectionGroupsUrl"], method="GET",
+            yield scrapy.Request(meta={PARENT_UID_KEY: parent["id"], ONENOTE_TYPE_KEY: types.OneNoteType.SECTION_GROUP}, url=parent["sectionGroupsUrl"], method="GET",
                                 headers={"Authorization": "Bearer " + self.accessToken},
                                 callback=self.parse_onenote_elements)
         
         if "sectionsUrl" in parent:
-            yield scrapy.Request(meta={PARENT_UID_KEY: parent["id"]}, url=parent["sectionsUrl"], method="GET",
+            yield scrapy.Request(meta={PARENT_UID_KEY: parent["id"], ONENOTE_TYPE_KEY: types.OneNoteType.SECTION}, url=parent["sectionsUrl"], method="GET",
                                 headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_onenote_elements)
         
-        if "sectionsUrl" in parent:
-            yield scrapy.Request(meta={PARENT_UID_KEY: parent["id"]}, url=parent["sectionsUrl"], method="GET",
-                                headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_onenote_elements)
-        
-        if "sectionsUrl" in parent:
-            yield scrapy.Request(meta={PARENT_UID_KEY: parent["id"]}, url=parent["sectionsUrl"], method="GET",
+        if "pagesUrl" in parent:
+            yield scrapy.Request(meta={PARENT_UID_KEY: parent["id"], ONENOTE_TYPE_KEY: types.OneNoteType.PAGE}, url=parent["pagesUrl"], method="GET",
                                 headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_onenote_elements)
 
 
-    def parse_section_groups(self, response):
-        sectionGroups = json.loads(response.text)["value"]
+    def map_element(self, elementType: types.OneNoteType, element, parentUid):
+        if elementType == types.OneNoteType.NOTEBOOK:
+            return self.map_element_to_notebook(element)
 
-         # check if any notebooks have been deleted
-        sectionGroupsUids = set()
-        for notebook in notebooks:
-            sectionGroupsUids.add(notebook["id"])
+        if elementType == types.OneNoteType.SECTION_GROUP:
+            return self.map_element_to_section_group(element, parentUid)
 
-        deletedNotebooks = self.alfredParentChildDictionary["notebooks"] - sectionGroupsUids
+        if elementType == types.OneNoteType.SECTION:
+            return self.map_element_to_section(element, parentUid)
 
-        # remove deleted notebooks and all the child elements from the
-        # alfredDataDictionary
-        self.delete_recursively(deletedNotebooks)
+        if elementType == types.OneNoteType.PAGE:
+            return self.map_element_to_page(element, parentUid)
 
-        for notebook in notebooks:
-            # do only scrape notebooks which do not include "(Archiv)" in their name and
-            # therefore are not yet archived
-            if notebook["displayName"].find("(Archiv)") > -1:
-                continue
-
-            # do only scrape notebooks which have been updated since the last sync
-            lastModified = self.parse_datetime(notebook["lastModifiedDateTime"])
-            if lastModified < self.lastSyncDate:
-                continue
-
-            # add/replace notebook element in data
-            self.alfredDataDictionary[notebook["id"]] = types.OneNoteElement(
-                    notebook['displayName'],
-                    notebook['displayName'],
-                    notebook['id'],
-                    notebook['displayName'],
-                    notebook['links']['oneNoteClientUrl'],
+    def map_element_to_notebook(self, element):
+        return types.OneNoteElement(
+                    self.extract_title(element),
+                    self.extract_title(element),
+                    element['id'],
+                    self.extract_title(element),
+                    element['links']['oneNoteClientUrl'],
                     "icons/notebook.png",
                     "file",
                     types.OneNoteType.NOTEBOOK,
                     None
-                ) 
+                )
+    
+    def map_element_to_section_group(self, element, parentUid):
+        return types.OneNoteElement(
+                    self.extract_title(element),
+                    self.extract_title(element),
+                    element['id'],
+                    self.extract_title(element['parentNotebook']),
+                    None,
+                    "icons/section-group.png",
+                    "file",
+                    types.OneNoteType.SECTION_GROUP,
+                    parentUid
+                )
+    
+    def map_element_to_section(self, element, parentUid):
+        return types.OneNoteElement(
+                    self.extract_title(element),
+                    self.extract_title(element),
+                    element['id'],
+                    self.extract_title(element['parentNotebook']),
+                    None,
+                    "icons/section.png",
+                    "file",
+                    types.OneNoteType.SECTION,
+                    parentUid
+                )
+    
+    def map_element_to_page(self, element, parentUid):
+        return types.OneNoteElement(
+                    self.extract_title(element),
+                    self.extract_title(element),
+                    element['id'],
+                    self.extract_title(element['parentSection']),
+                    element['links']['oneNoteClientUrl'],
+                    "icons/page.png",
+                    "file",
+                    types.OneNoteType.PAGE,
+                    parentUid
+                )
 
-            # scrape children
-            yield scrapy.Request(url=notebook["sectionGroupsUrl"], method="GET",
-                                 headers={"Authorization": "Bearer " + self.accessToken},
-                                 callback=self.parse_section_groups)
-            yield scrapy.Request(url=notebook["sectionsUrl"], method="GET",
-                                 headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_sections)
-
-
-
-
-        for sectionGroup in sectionGroups:
-            yield scrapy.Request(url=sectionoGroup["sectionsUrl"], method="GET",
-                                 headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_sections)
-
-    def parse_sections(self, response):
-        sections = json.loads(response.text)["value"]
-        sectionInfo = {
-            "sectionName": sections["value"][0]["displayName"],
-            "notebookName": sections["value"][0]["parentNotebook"]["displayName"]
-        }
-
-        # do only scrape notebooks which do not include "(Archiv)" in their name and
-        # therefore are not yet archived
-        if sectionInfo["notebookName"].find("(Archiv)") == -1:
-            for section in sections:
-                yield scrapy.Request(meta={"sectionInfo": sectionInfo}, url=section["pagesUrl"], method="GET",
-                                     headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_pages)
-
-    def parse_pages(self, response):
-        sectionInfo = response.meta["sectionInfo"]
-        pages = json.loads(response.text)["value"]
-
-        for page in pages:
-            yield {
-                'pageName': page["title"],
-                'pageOneNoteClientUrl': page["links"]["oneNoteClientUrl"]["href"],
-                'parentSectionName': sectionInfo["sectionName"],
-                'notebookName': sectionInfo["notebookName"]
-            }
+    def update_modified_element(self, elementOnenoteType, element, parentUid):
+        elementMapped = self.map_element(elementOnenoteType, element, parentUid)
+        self.alfredDataDictionary[elementMapped.uid] = elementMapped
 
     def delete_recursively(self, uids: [str]):
         for uid in uids:
@@ -273,6 +209,14 @@ class OneNotePageSpider(scrapy.Spider):
         except:
             return datetime.strptime(datetimeString, "%Y-%m-%dT%H:%M:%S%z")
 
+    def extract_title(self, element):
+        if 'displayName' in element:
+            return element['displayName']
+        
+        if 'title' in element:
+            return element['title']
+
+        raise RuntimeError("Cannot retrieve title of element: " + element ["self"]) 
 
 class TooManyRequestsRetryMiddleware(RetryMiddleware):
 
