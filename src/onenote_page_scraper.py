@@ -63,7 +63,7 @@ class OneNotePageSpider(scrapy.Spider):
         return deletedElements
 
     '''
-    Identifies all the elements in the list of elements hat need to be updated.
+    Identifies all the elements in the list of elements that need to be updated.
     It is decided based on the name of an element and its lastModifiedTimestamp if an
     element needs to be updated or not.
     '''
@@ -71,7 +71,7 @@ class OneNotePageSpider(scrapy.Spider):
          for child in children:
             # do only scrape elements which do not include "(Archiv)" in their name and
             # therefore are not yet archived
-            if "(Archiv)".find(self.extract_title(child)) > -1:
+            if self.extract_title(child).find("(Archiv)") > -1:
                 continue
 
             # do only scrape elements which have been updated since the last sync
@@ -118,7 +118,7 @@ class OneNotePageSpider(scrapy.Spider):
                     self.extract_title(element),
                     element['id'],
                     self.extract_title(element),
-                    element['links']['oneNoteClientUrl'],
+                    self.extract_link(element),
                     "icons/notebook.png",
                     "file",
                     types.OneNoteType.NOTEBOOK,
@@ -157,7 +157,7 @@ class OneNotePageSpider(scrapy.Spider):
                     self.extract_title(element),
                     element['id'],
                     self.extract_title(element['parentSection']),
-                    element['links']['oneNoteClientUrl'],
+                    self.extract_link(element),
                     "icons/page.png",
                     "file",
                     types.OneNoteType.PAGE,
@@ -190,6 +190,12 @@ class OneNotePageSpider(scrapy.Spider):
             return element['title']
 
         raise RuntimeError("Cannot retrieve title of element: " + element ["self"]) 
+   
+    def extract_link(self, element):
+        if 'href' in element['links']['oneNoteClientUrl']:
+            return element['links']['oneNoteClientUrl']['href']
+        
+        return element['links']['oneNoteClientUrl'] 
 
 class TooManyRequestsRetryMiddleware(RetryMiddleware):
 

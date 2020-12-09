@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 from datetime import datetime
 
@@ -30,18 +31,18 @@ def genarateListFromDictionary(allAlfredDataDictionary: {types.OneNoteElement}):
 
 def genarateParentChildDictionaryFromDictionary(alfredDataDictionary: {str, types.OneNoteElement}):
     alfredParentChildDictionary = {
-        "notebooks": set()
+        "notebooks": []
     }
 
     for element in alfredDataDictionary:
         element = alfredDataDictionary[element]
         if element.onenoteType == types.OneNoteType.NOTEBOOK:
-            alfredParentChildDictionary[types.NOTEBOOKS_KEY].add(element.uid)
+            alfredParentChildDictionary[types.NOTEBOOKS_KEY].append(element.uid)
 
         if element.parentUid not in alfredParentChildDictionary:
-            alfredParentChildDictionary[element.parentUid] = set()
+            alfredParentChildDictionary[element.parentUid] = []
 
-        alfredParentChildDictionary[element.parentUid].add(element.uid)
+        alfredParentChildDictionary[element.parentUid].append(element.uid)
 
     return alfredParentChildDictionary
 
@@ -73,7 +74,24 @@ def store_last_sync_date_in_file(file_path: str, date: str):
     with open(file_path, mode='w') as file:
         file.write(date)
 
+def recursively_find_url_of_first_child_page(element: types.OneNoteElement, alfredDataDictionary, alfredParentChildDictionary):
+    if (element.onenoteType == types.OneNoteType.PAGE):
+        return element.arg
+    
+    if (element.uid in alfredParentChildDictionary):
+        childElement = alfredDataDictionary[alfredParentChildDictionary[element.uid][0]]
+        return recursively_find_url_of_first_child_page(childElement, alfredDataDictionary, alfredParentChildDictionary)
+        
+    return None
 
+def add_page_urls_to_elements_without_url(allAlfredDataList: [types.OneNoteElement], alfredDataDictionary, alfredParentChildDictionary):
+    for element in allAlfredDataList:
+        if (element.arg == None):
+            pageUrl = recursively_find_url_of_first_child_page(element, alfredDataDictionary, alfredParentChildDictionary)
+            
+            if (pageUrl != None):
+                sectionUrl = re.sub(r'page-id=.*&', '', pageUrl)
+                element.arg = sectionUrl
 
 def main():
     config = json.load(open(sys.argv[1]))
@@ -104,6 +122,8 @@ def main():
 
     alfredParentChildDictionary = genarateParentChildDictionaryFromDictionary(alfredDataDictionary)
     allAlfredDataList = genarateListFromDictionary(alfredDataDictionary)
+
+    add_page_urls_to_elements_without_url(allAlfredDataList, alfredDataDictionary, alfredParentChildDictionary)
 
     store_alfred_data_in_file(ONENOTE_ELEMENTS_FILE, allAlfredDataList)
     store_last_sync_date_in_file(LAST_SYNC_DATE_FILE, thisSyncDate)
