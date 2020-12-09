@@ -1,5 +1,8 @@
 from enum import Enum
 
+PARENT_UID_KEY = "parentUid"
+ONENOTE_TYPE_KEY = "onenoteType"
+NOTEBOOKS_KEY = "notebooks"
 
 class OneNoteType(str, Enum):
     NOTEBOOK = "notebook"

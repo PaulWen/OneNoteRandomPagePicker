@@ -70,6 +70,12 @@ Start the application, follow the instructions and use a browser to authenticate
 python ./src/main.py config.json
 ```
 
+## Debug
+
+Add `'CLOSESPIDER_PAGECOUNT': 10` to the `CrawlerProcess` configuration in
+[main.py](/src/main.py) to not scrape all OneNote elements but only a few for testing
+purposes.
+
 ## Documentation
 
 -   the scraper ignores notebooks which include `(Archiv)` in their name as those are

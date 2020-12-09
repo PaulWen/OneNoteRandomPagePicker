@@ -9,47 +9,20 @@ from scrapy.utils.response import response_status_message
 
 import onenote_types as types
 
-PARENT_UID_KEY = "parentUid"
-ONENOTE_TYPE_KEY = "onenoteType"
-NOTEBOOKS_KEY = "notebooks"
 
 class OneNotePageSpider(scrapy.Spider):
 
-    def __init__(self, accessToken, allAlfredData: [types.OneNoteElement], lastSyncDate):
+    def __init__(self, accessToken, alfredDataDictionary: {str, types.OneNoteElement}, alfredParentChildDictionary: {str, (str)}, lastSyncDate):
         self.name = 'OneNotePage'
         self.allowed_domains = ['graph.microsoft.com']
         self.accessToken = accessToken
         self.lastSyncDate = lastSyncDate if type(lastSyncDate) is datetime else datetime.strptime(
             '2000-01-01T00:00:00.000Z', "%Y-%m-%dT%H:%M:%S.%f%z")
-        self.alfredDataDictionary = self.genarateDictionaryFromList(allAlfredData)
-        self.alfredParentChildDictionary = self.genarateParentChildDictionaryFromList(allAlfredData)
-
-    def genarateDictionaryFromList(self, allAlfredData: [types.OneNoteElement]):
-        alfredDictionaryData = {}
-
-        for element in allAlfredData:
-            alfredDictionaryData[element.uid] = element
-
-        return alfredDictionaryData
-
-    def genarateParentChildDictionaryFromList(self, allAlfredData: [types.OneNoteElement]):
-        alfredParentChildDictionary = {
-            "notebooks": set()
-        }
-
-        for element in allAlfredData:
-            if element.onenoteType == types.OneNoteType.NOTEBOOK:
-                alfredParentChildDictionary[NOTEBOOKS_KEY].add(element.uid)
-
-            if element.parentUid not in alfredParentChildDictionary:
-                alfredParentChildDictionary[element.parentUid] = set()
-
-            alfredParentChildDictionary[element.parentUid].add(element.uid)
-
-        return alfredParentChildDictionary
+        self.alfredDataDictionary = alfredDataDictionary
+        self.alfredParentChildDictionary = alfredParentChildDictionary
 
     def start_requests(self):
-        yield scrapy.Request(meta={PARENT_UID_KEY: NOTEBOOKS_KEY, ONENOTE_TYPE_KEY: types.OneNoteType.NOTEBOOK}, url='https://graph.microsoft.com/v1.0/me/onenote/notebooks', method="GET",
+        yield scrapy.Request(meta={types.PARENT_UID_KEY: types.NOTEBOOKS_KEY, types.ONENOTE_TYPE_KEY: types.OneNoteType.NOTEBOOK}, url='https://graph.microsoft.com/v1.0/me/onenote/notebooks', method="GET",
                              headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_onenote_elements)
 
     '''
@@ -57,8 +30,8 @@ class OneNotePageSpider(scrapy.Spider):
     group, page). The function syncs the data with the current set of data. 
     '''
     def parse_onenote_elements(self, response):
-        parentUid = response.meta[PARENT_UID_KEY]
-        childOnenoteType = response.meta[ONENOTE_TYPE_KEY]
+        parentUid = response.meta[types.PARENT_UID_KEY]
+        childOnenoteType = response.meta[types.ONENOTE_TYPE_KEY]
         children = json.loads(response.text)["value"]
 
         deletedChildren = self.identify_deleted_children(parentUid, children)
@@ -113,16 +86,16 @@ class OneNotePageSpider(scrapy.Spider):
     '''
     def scrape_children(self, parent):
         if "sectionGroupsUrl" in parent:
-            yield scrapy.Request(meta={PARENT_UID_KEY: parent["id"], ONENOTE_TYPE_KEY: types.OneNoteType.SECTION_GROUP}, url=parent["sectionGroupsUrl"], method="GET",
+            yield scrapy.Request(meta={types.PARENT_UID_KEY: parent["id"], types.ONENOTE_TYPE_KEY: types.OneNoteType.SECTION_GROUP}, url=parent["sectionGroupsUrl"], method="GET",
                                 headers={"Authorization": "Bearer " + self.accessToken},
                                 callback=self.parse_onenote_elements)
         
         if "sectionsUrl" in parent:
-            yield scrapy.Request(meta={PARENT_UID_KEY: parent["id"], ONENOTE_TYPE_KEY: types.OneNoteType.SECTION}, url=parent["sectionsUrl"], method="GET",
+            yield scrapy.Request(meta={types.PARENT_UID_KEY: parent["id"], types.ONENOTE_TYPE_KEY: types.OneNoteType.SECTION}, url=parent["sectionsUrl"], method="GET",
                                 headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_onenote_elements)
         
         if "pagesUrl" in parent:
-            yield scrapy.Request(meta={PARENT_UID_KEY: parent["id"], ONENOTE_TYPE_KEY: types.OneNoteType.PAGE}, url=parent["pagesUrl"], method="GET",
+            yield scrapy.Request(meta={types.PARENT_UID_KEY: parent["id"], types.ONENOTE_TYPE_KEY: types.OneNoteType.PAGE}, url=parent["pagesUrl"], method="GET",
                                 headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_onenote_elements)
 
 
