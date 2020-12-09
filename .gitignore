@@ -106,6 +106,5 @@ venv.bak/
 # project specific excludes
 config.json
 token_cache.bin
-result.json
 onenoteElements.json
 lastSyncDate.txt
