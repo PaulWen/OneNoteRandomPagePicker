@@ -9,11 +9,15 @@ from scrapy.utils.response import response_status_message
 
 import onenote_types as types
 
-
-class OneNotePageSpider(scrapy.Spider):
+'''
+This spider loads all types of onenote elements (e.g. notebook, section, section group,
+page) and syncs them with the current set of onenote elements. If onenote elements already
+exist, this spider will only load those elements again that changed since the last sync.
+'''
+class OneNoteSyncSpider(scrapy.Spider):
 
     def __init__(self, accessToken, alfredDataDictionary: {str, types.OneNoteElement}, alfredParentChildDictionary: {str, (str)}, lastSyncDate):
-        self.name = 'OneNotePage'
+        self.name = 'OneNoteSyncSpider'
         self.allowed_domains = ['graph.microsoft.com']
         self.accessToken = accessToken
         self.lastSyncDate = lastSyncDate if type(lastSyncDate) is datetime else datetime.strptime(
@@ -122,7 +126,7 @@ class OneNotePageSpider(scrapy.Spider):
                     "icons/notebook.png",
                     "file",
                     types.OneNoteType.NOTEBOOK,
-                    None
+                    types.NOTEBOOKS_KEY
                 )
     
     def map_element_to_section_group(self, element, parentUid):

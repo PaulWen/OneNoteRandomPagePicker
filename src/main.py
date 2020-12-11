@@ -7,7 +7,8 @@ import requests
 from scrapy.crawler import CrawlerProcess
 
 import microsoft_graph_device_flow as auth
-import onenote_page_scraper as scraper
+import onenote_notebook_scraper as notebook_scraper
+import onenote_sync_scraper as sync_scraper
 import onenote_types as types
 
 LAST_SYNC_DATE_FILE = "lastSyncDate.txt"
@@ -30,14 +31,10 @@ def genarateListFromDictionary(allAlfredDataDictionary: {types.OneNoteElement}):
     return allAlfredListData
 
 def genarateParentChildDictionaryFromDictionary(alfredDataDictionary: {str, types.OneNoteElement}):
-    alfredParentChildDictionary = {
-        "notebooks": []
-    }
+    alfredParentChildDictionary = {}
 
     for element in alfredDataDictionary:
         element = alfredDataDictionary[element]
-        if element.onenoteType == types.OneNoteType.NOTEBOOK:
-            alfredParentChildDictionary[types.NOTEBOOKS_KEY].append(element.uid)
 
         if element.parentUid not in alfredParentChildDictionary:
             alfredParentChildDictionary[element.parentUid] = []
@@ -117,7 +114,7 @@ def main():
             'onenote_page_scraper.TooManyRequestsRetryMiddleware': 543, # activate custom middleware for retries (543 is the priority of this middleware)
         }
     })
-    process.crawl(scraper.OneNotePageSpider, accessToken, alfredDataDictionary, alfredParentChildDictionary, lastSyncDate)
+    process.crawl(sync_scraper.OneNoteSyncSpider, accessToken, alfredDataDictionary, alfredParentChildDictionary, lastSyncDate)
     process.start() # the script will block here until the crawling is finished
 
     alfredParentChildDictionary = genarateParentChildDictionaryFromDictionary(alfredDataDictionary)
@@ -130,4 +127,22 @@ def main():
 
     print("Done")
 
-main()
+def scrape_all_notebooks():
+    config = json.load(open(sys.argv[1]))
+
+    notebooks: [types.OneNoteElement] = []
+
+    accessToken = auth.retrieveAccessToken()
+    
+    process = CrawlerProcess({
+        'USER_AGENT': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)',
+        'FEED_FORMAT': 'json',
+        'FEED_URI': 'result.json',
+        'CONCURRENT_REQUESTS_PER_DOMAIN': 4,
+    })
+    process.crawl(notebook_scraper.OneNoteNotebookSpider, accessToken, notebooks)
+    process.start() # the script will block here until the crawling is finished
+
+    print("Done")
+
+main2()
