@@ -26,43 +26,83 @@ class OneNoteSyncSpider(scrapy.Spider):
         self.alfredParentChildDictionary = alfredParentChildDictionary
 
     def start_requests(self):
-        yield scrapy.Request(meta={types.PARENT_UID_KEY: types.NOTEBOOKS_KEY, types.ONENOTE_TYPE_KEY: types.OneNoteType.NOTEBOOK}, url='https://graph.microsoft.com/v1.0/me/onenote/notebooks', method="GET",
+        yield scrapy.Request(meta={types.ONENOTE_TYPE_KEY: types.OneNoteType.NOTEBOOK}, url='https://graph.microsoft.com/v1.0/me/onenote/notebooks', method="GET",
+                             headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_onenote_elements)
+        
+        yield scrapy.Request(meta={types.ONENOTE_TYPE_KEY: types.OneNoteType.SECTION_GROUP}, url='https://graph.microsoft.com/v1.0/me/onenote/sectiongroups', method="GET",
+                             headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_onenote_elements)
+        
+        yield scrapy.Request(meta={types.ONENOTE_TYPE_KEY: types.OneNoteType.SECTION}, url='https://graph.microsoft.com/v1.0/me/onenote/sections', method="GET",
                              headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_onenote_elements)
 
     '''
-    Can be used to parse one type of onenote elements (e.g. notebook, section, section
-    group, page). The function syncs the data with the current set of data. 
+    Is used to parse one type of onenote elements: notebook, section, section
+    group. The function syncs the data with the current set of data. 
     '''
     def parse_onenote_elements(self, response):
-        parentUid = response.meta[types.PARENT_UID_KEY]
-        childOnenoteType = response.meta[types.ONENOTE_TYPE_KEY]
-        children = json.loads(response.text)["value"]
+        onenoteType = response.meta[types.ONENOTE_TYPE_KEY]
+        elements = json.loads(response.text)["value"]
 
-        deletedChildren = self.identify_deleted_children(parentUid, children)
-        self.delete_recursively(deletedChildren)
+        deletedElementsUids = self.identify_deleted_elements_uids(onenoteType, elements)
+        self.delete_recursively(deletedElementsUids)
 
-        modifiedChildren = self.identify_modified_children(children)
+        modifiedElements = self.identify_modified_elements(elements)
 
-        for child in modifiedChildren:
-            self.update_modified_element(childOnenoteType, child, parentUid)
-            scrape_child_request = self.scrape_children(child)
-            for request in scrape_child_request:
-                yield request
+        for element in modifiedElements:
+            self.update_modified_element(onenoteType, element)
+            
+            if onenoteType == types.OneNoteType.SECTION:
+                yield self.scrape_pages(element)
+   
+    '''
+    Is used to parse a list of onenote pages. The function syncs the data with the current set of data. 
+    '''
+    def parse_onenote_pages(self, response):
+        sectionUid = response.meta[types.PARENT_UID_KEY]
+        pages = json.loads(response.text)["value"]
 
+        deletedPagesUids = self.identify_deleted_pages_uids(sectionUid, pages)
+        self.delete_recursively(deletedPagesUids)
+
+        modifiedPages = self.identify_modified_elements(pages)
+
+        for page in modifiedPages:
+            self.update_modified_element(types.OneNoteType.PAGE, page)
 
     '''
-    This function detects all the deleted children of a parent.
-    For this to work, it is expacted that the list of children includes all the children
-    the parent currently has. 
+    This function detects all the deleted pages of a section.
+    For this to work, it is expacted that the list of pages includes all the pages
+    the section currently has. 
     '''                                 
-    def identify_deleted_children(self, parentUid, children):
-        childrenUids = set()
-        for child in children:
-            childrenUids.add(child["id"])
+    def identify_deleted_pages_uids(self, sectionUid, pages):
+        pagesUids = set()
+        for page in pages:
+            pagesUids.add(page["id"])
 
-        pastChildrenUids = self.alfredParentChildDictionary[parentUid] if None else set()
+        pastChildrenUids = self.alfredParentChildDictionary[sectionUid] if None else set()
 
-        deletedElements = pastChildrenUids - childrenUids
+        deletedElements = pastChildrenUids - pagesUids
+
+        return deletedElements
+    
+    '''
+    This function detects all the deleted elements of the same type.
+    For this to work, it is expacted that the list of peers includes all the peers
+    the onenote type currently reviewed. 
+
+    This function is used to detected deleted notebooks section groups and sections.
+    '''                                 
+    def identify_deleted_elements_uids(self, onenoteType, elements):
+        elementUids = set()
+        for element in elements:
+            elementUids.add(element["id"])
+        
+        pastElementUids = set()
+        for pastElement in self.alfredDataDictionary.values():
+            if pastElement.onenoteType == onenoteType:
+                pastElementUids.add(pastElement.uid)
+
+        deletedElements = pastElementUids - elementUids
 
         return deletedElements
 
@@ -71,50 +111,41 @@ class OneNoteSyncSpider(scrapy.Spider):
     It is decided based on the name of an element and its lastModifiedTimestamp if an
     element needs to be updated or not.
     '''
-    def identify_modified_children(self, children):
-         for child in children:
+    def identify_modified_elements(self, elements):
+         for element in elements:
             # do only scrape elements which do not include "(Archiv)" in their name and
             # therefore are not yet archived
-            if self.extract_title(child).find("(Archiv)") > -1:
+            if self.extract_title(element).find("(Archiv)") > -1:
                 continue
 
             # do only scrape elements which have been updated since the last sync
-            lastModified = self.parse_datetime(child["lastModifiedDateTime"])
+            lastModified = self.parse_datetime(element["lastModifiedDateTime"])
             if lastModified < self.lastSyncDate:
                 continue
         
-            yield child
+            yield element
 
     '''
-    Scrapes the children of the passed in element.
+    Scrapes the pages of the passed in element.
     '''
-    def scrape_children(self, parent):
-        if "sectionGroupsUrl" in parent:
-            yield scrapy.Request(meta={types.PARENT_UID_KEY: parent["id"], types.ONENOTE_TYPE_KEY: types.OneNoteType.SECTION_GROUP}, url=parent["sectionGroupsUrl"], method="GET",
-                                headers={"Authorization": "Bearer " + self.accessToken},
-                                callback=self.parse_onenote_elements)
-        
-        if "sectionsUrl" in parent:
-            yield scrapy.Request(meta={types.PARENT_UID_KEY: parent["id"], types.ONENOTE_TYPE_KEY: types.OneNoteType.SECTION}, url=parent["sectionsUrl"], method="GET",
-                                headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_onenote_elements)
-        
+    def scrape_pages(self, parent):
         if "pagesUrl" in parent:
-            yield scrapy.Request(meta={types.PARENT_UID_KEY: parent["id"], types.ONENOTE_TYPE_KEY: types.OneNoteType.PAGE}, url=parent["pagesUrl"], method="GET",
-                                headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_onenote_elements)
+            return scrapy.Request(meta={types.PARENT_UID_KEY: parent["id"]}, url=parent["pagesUrl"], method="GET",
+                                headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_onenote_pages)
 
 
-    def map_element(self, elementType: types.OneNoteType, element, parentUid):
+    def map_element(self, elementType: types.OneNoteType, element):
         if elementType == types.OneNoteType.NOTEBOOK:
             return self.map_element_to_notebook(element)
 
         if elementType == types.OneNoteType.SECTION_GROUP:
-            return self.map_element_to_section_group(element, parentUid)
+            return self.map_element_to_section_group(element)
 
         if elementType == types.OneNoteType.SECTION:
-            return self.map_element_to_section(element, parentUid)
+            return self.map_element_to_section(element)
 
         if elementType == types.OneNoteType.PAGE:
-            return self.map_element_to_page(element, parentUid)
+            return self.map_element_to_page(element)
 
     def map_element_to_notebook(self, element):
         return types.OneNoteElement(
@@ -126,10 +157,10 @@ class OneNoteSyncSpider(scrapy.Spider):
                     "icons/notebook.png",
                     "file",
                     types.OneNoteType.NOTEBOOK,
-                    types.NOTEBOOKS_KEY
+                    None
                 )
     
-    def map_element_to_section_group(self, element, parentUid):
+    def map_element_to_section_group(self, element):
         return types.OneNoteElement(
                     self.extract_title(element),
                     self.extract_title(element),
@@ -139,10 +170,10 @@ class OneNoteSyncSpider(scrapy.Spider):
                     "icons/section-group.png",
                     "file",
                     types.OneNoteType.SECTION_GROUP,
-                    parentUid
+                    self.extract_parentUid(element)
                 )
     
-    def map_element_to_section(self, element, parentUid):
+    def map_element_to_section(self, element):
         return types.OneNoteElement(
                     self.extract_title(element),
                     self.extract_title(element),
@@ -152,10 +183,10 @@ class OneNoteSyncSpider(scrapy.Spider):
                     "icons/section.png",
                     "file",
                     types.OneNoteType.SECTION,
-                    parentUid
+                    self.extract_parentUid(element)
                 )
     
-    def map_element_to_page(self, element, parentUid):
+    def map_element_to_page(self, element):
         return types.OneNoteElement(
                     self.extract_title(element),
                     self.extract_title(element),
@@ -165,11 +196,11 @@ class OneNoteSyncSpider(scrapy.Spider):
                     "icons/page.png",
                     "file",
                     types.OneNoteType.PAGE,
-                    parentUid
+                    self.extract_parentUid(element)
                 )
 
-    def update_modified_element(self, elementOnenoteType, element, parentUid):
-        elementMapped = self.map_element(elementOnenoteType, element, parentUid)
+    def update_modified_element(self, elementOnenoteType, element):
+        elementMapped = self.map_element(elementOnenoteType, element)
         self.alfredDataDictionary[elementMapped.uid] = elementMapped
 
     def delete_recursively(self, uids: [str]):
@@ -192,6 +223,19 @@ class OneNoteSyncSpider(scrapy.Spider):
         
         if 'title' in element:
             return element['title']
+
+        raise RuntimeError("Cannot retrieve title of element: " + element ["self"]) 
+
+    def extract_parentUid(self, element):
+        if 'parentSection' in element and element['parentSection'] != None:
+            return element['parentSection']['id']
+
+        if 'parentSectionGroup' in element and element['parentSectionGroup'] != None:
+            return element['parentSectionGroup']['id']
+        
+        if 'parentNotebook' in element and element['parentNotebook'] != None:
+            return element['parentNotebook']['id']
+        
 
         raise RuntimeError("Cannot retrieve title of element: " + element ["self"]) 
    
