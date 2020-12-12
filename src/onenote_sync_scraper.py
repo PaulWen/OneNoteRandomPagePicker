@@ -113,9 +113,7 @@ class OneNoteSyncSpider(scrapy.Spider):
     '''
     def identify_modified_elements(self, elements):
          for element in elements:
-            # do only scrape elements which do not include "(Archiv)" in their name and
-            # therefore are not yet archived
-            if self.extract_title(element).find("(Archiv)") > -1:
+            if self.is_element_archived(element):
                 continue
 
             # do only scrape elements which have been updated since the last sync
@@ -124,6 +122,23 @@ class OneNoteSyncSpider(scrapy.Spider):
                 continue
         
             yield element
+
+    '''
+    Do only scrape elements which do not include "(Archiv)" in their name and
+    therefore are not yet archived.
+    '''
+    def is_element_archived(self, element):
+        if self.extract_title(element).find("(Archiv)") > -1:
+            return True
+        
+        if "parentNotebook" in element and element['parentNotebook']['displayName'].find("(Archiv)") > -1:
+            return True
+        
+        link = self.extract_link(element)
+        if link != None and link.find("/One%20Note/Archiv/") > -1:
+            return True
+
+        return False
 
     '''
     Scrapes the pages of the passed in element.
@@ -240,10 +255,13 @@ class OneNoteSyncSpider(scrapy.Spider):
         raise RuntimeError("Cannot retrieve title of element: " + element ["self"]) 
    
     def extract_link(self, element):
+        if not 'links' in element:
+            return None
+
         if 'href' in element['links']['oneNoteClientUrl']:
             return element['links']['oneNoteClientUrl']['href']
         
-        return element['links']['oneNoteClientUrl'] 
+        return element['links']['oneNoteClientUrl']
 
 class TooManyRequestsRetryMiddleware(RetryMiddleware):
 

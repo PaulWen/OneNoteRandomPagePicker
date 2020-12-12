@@ -110,7 +110,7 @@ def main():
         'FEED_URI': 'result.json',
         'CONCURRENT_REQUESTS_PER_DOMAIN': 4,
         'RETRY_HTTP_CODES': [429],
-        'CLOSESPIDER_PAGECOUNT': 10,
+        # 'CLOSESPIDER_PAGECOUNT': 10,
         'DOWNLOADER_MIDDLEWARES': {
             'scrapy.downloadermiddlewares.retry.RetryMiddleware': None, # deactivate default middleware
             'onenote_sync_scraper.TooManyRequestsRetryMiddleware': 543, # activate custom middleware for retries (543 is the priority of this middleware)
