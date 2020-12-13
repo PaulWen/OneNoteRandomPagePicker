@@ -99,6 +99,9 @@ def main():
     alfredDataDictionary = genarateDictionaryFromList(allAlfredData)
     alfredParentChildDictionary = genarateParentChildDictionaryFromDictionary(alfredDataDictionary)
     
+    pagesDeleted = set()
+    pagesModified = set()
+    
     lastSyncDate = load_last_sync_date_from_file(LAST_SYNC_DATE_FILE)
     thisSyncDate = datetime.now().astimezone().strftime('%Y-%m-%dT%H:%M:%S.%f%z')
 

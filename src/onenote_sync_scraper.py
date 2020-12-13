@@ -16,7 +16,7 @@ exist, this spider will only load those elements again that changed since the la
 '''
 class OneNoteSyncSpider(scrapy.Spider):
 
-    def __init__(self, accessToken, alfredDataDictionary: {str, types.OneNoteElement}, alfredParentChildDictionary: {str, (str)}, lastSyncDate):
+    def __init__(self, accessToken, alfredDataDictionary: {str, types.OneNoteElement}, alfredParentChildDictionary: {str, (str)}, lastSyncDate, pagesModified: set(), pagesDeleted: set()):
         self.name = 'OneNoteSyncSpider'
         self.allowed_domains = ['graph.microsoft.com']
         self.accessToken = accessToken
@@ -24,6 +24,8 @@ class OneNoteSyncSpider(scrapy.Spider):
             '2000-01-01T00:00:00.000Z', "%Y-%m-%dT%H:%M:%S.%f%z")
         self.alfredDataDictionary = alfredDataDictionary
         self.alfredParentChildDictionary = alfredParentChildDictionary
+        self.pagesModified = pagesModified
+        self.pagesDeleted = pagesDeleted
 
     def start_requests(self):
         yield scrapy.Request(meta={types.ONENOTE_TYPE_KEY: types.OneNoteType.NOTEBOOK}, url='https://graph.microsoft.com/v1.0/me/onenote/notebooks', method="GET",
@@ -62,11 +64,13 @@ class OneNoteSyncSpider(scrapy.Spider):
         pages = json.loads(response.text)["value"]
 
         deletedPagesUids = self.identify_deleted_pages_uids(sectionUid, pages)
+        self.pagesDeleted.update(deletedPagesUids)
         self.delete_recursively(deletedPagesUids)
 
         modifiedPages = self.identify_modified_elements(pages)
 
         for page in modifiedPages:
+            self.pagesModified.add(page['id'])
             self.update_modified_element(types.OneNoteType.PAGE, page)
 
     '''
