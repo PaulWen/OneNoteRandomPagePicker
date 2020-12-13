@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import sys
 from datetime import datetime
@@ -7,11 +8,26 @@ import requests
 from scrapy.crawler import CrawlerProcess
 
 import microsoft_graph_device_flow as auth
-import onenote_sync_scraper as scraper
+import onenote_page_content_scraper as page_content_scraper
+import onenote_sync_scraper as sync_scraper
 import onenote_types as types
 
 LAST_SYNC_DATE_FILE = "lastSyncDate.txt"
 ONENOTE_ELEMENTS_FILE = "onenoteElements.json"
+PAGE_CONTENT_FOLDER = "./page-content/"
+
+CRAWLER_CONFIG = {
+        'USER_AGENT': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)',
+        'FEED_FORMAT': 'json',
+        'FEED_URI': 'result.json',
+        'CONCURRENT_REQUESTS_PER_DOMAIN': 4,
+        'RETRY_HTTP_CODES': [429],
+        'CLOSESPIDER_PAGECOUNT': 10,
+        'DOWNLOADER_MIDDLEWARES': {
+            'scrapy.downloadermiddlewares.retry.RetryMiddleware': None, # deactivate default middleware
+            'onenote_retry_middleware.TooManyRequestsRetryMiddleware': 543, # activate custom middleware for retries (543 is the priority of this middleware)
+        }
+    }
 
 def genarateDictionaryFromList(allAlfredData: [types.OneNoteElement]):
     alfredDictionaryData = {}
@@ -92,6 +108,12 @@ def add_page_urls_to_elements_without_url(allAlfredDataList: [types.OneNoteEleme
                 sectionUrl = re.sub(r'page-id=.*&', '', pageUrl)
                 element.arg = sectionUrl
 
+def delete_pages(pagesUids):
+    for pageUid in pagesUids:
+        filePath = PAGE_CONTENT_FOLDER + pageUid + ".html"
+        if os.path.isfile(filePath):
+            os.remove(filePath)
+
 def main():
     config = json.load(open(sys.argv[1]))
 
@@ -107,20 +129,9 @@ def main():
 
     accessToken = auth.retrieveAccessToken()
     
-    process = CrawlerProcess({
-        'USER_AGENT': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)',
-        'FEED_FORMAT': 'json',
-        'FEED_URI': 'result.json',
-        'CONCURRENT_REQUESTS_PER_DOMAIN': 4,
-        'RETRY_HTTP_CODES': [429],
-        # 'CLOSESPIDER_PAGECOUNT': 10,
-        'DOWNLOADER_MIDDLEWARES': {
-            'scrapy.downloadermiddlewares.retry.RetryMiddleware': None, # deactivate default middleware
-            'onenote_sync_scraper.TooManyRequestsRetryMiddleware': 543, # activate custom middleware for retries (543 is the priority of this middleware)
-        }
-    })
-    process.crawl(scraper.OneNoteSyncSpider, accessToken, alfredDataDictionary, alfredParentChildDictionary, lastSyncDate)
-    process.start() # the script will block here until the crawling is finished
+    crawlOneNoteElements = CrawlerProcess(CRAWLER_CONFIG)
+    crawlOneNoteElements.crawl(sync_scraper.OneNoteSyncSpider, accessToken, alfredDataDictionary, alfredParentChildDictionary, lastSyncDate, pagesModified, pagesDeleted)
+    crawlOneNoteElements.start() # the script will block here until the crawling is finished
 
     alfredParentChildDictionary = genarateParentChildDictionaryFromDictionary(alfredDataDictionary)
     allAlfredDataList = genarateListFromDictionary(alfredDataDictionary)
@@ -130,7 +141,12 @@ def main():
     store_alfred_data_in_file(ONENOTE_ELEMENTS_FILE, allAlfredDataList)
     store_last_sync_date_in_file(LAST_SYNC_DATE_FILE, thisSyncDate)
 
-    print("Done")
+    delete_pages(pagesDeleted)
 
+    crawlPageContent = CrawlerProcess(CRAWLER_CONFIG)
+    crawlPageContent.crawl(page_content_scraper.OneNotePageContentSpider, accessToken, pagesModified, PAGE_CONTENT_FOLDER)
+    crawlPageContent.start() # the script will block here until the crawling is finished
+
+    print("Done")
 
 main()

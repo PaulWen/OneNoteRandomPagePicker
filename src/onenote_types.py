@@ -1,6 +1,7 @@
 from enum import Enum
 
 PARENT_UID_KEY = "parentUid"
+PAGE_UID_KEY = "pageUid"
 ONENOTE_TYPE_KEY = "onenoteType"
 NOTEBOOKS_KEY = "notebooks"
 

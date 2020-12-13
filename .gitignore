@@ -108,3 +108,4 @@ config.json
 token_cache.bin
 onenoteElements.json
 lastSyncDate.txt
+page-content/
