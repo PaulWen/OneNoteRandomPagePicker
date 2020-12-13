@@ -172,7 +172,8 @@ class OneNoteSyncSpider(scrapy.Spider):
                     "icons/notebook.png",
                     "file",
                     types.OneNoteType.NOTEBOOK,
-                    None
+                    None,
+                    element['lastModifiedDateTime']
                 )
     
     def map_element_to_section_group(self, element):
@@ -185,7 +186,8 @@ class OneNoteSyncSpider(scrapy.Spider):
                     "icons/section-group.png",
                     "file",
                     types.OneNoteType.SECTION_GROUP,
-                    self.extract_parentUid(element)
+                    self.extract_parentUid(element),
+                    element['lastModifiedDateTime']
                 )
     
     def map_element_to_section(self, element):
@@ -198,7 +200,8 @@ class OneNoteSyncSpider(scrapy.Spider):
                     "icons/section.png",
                     "file",
                     types.OneNoteType.SECTION,
-                    self.extract_parentUid(element)
+                    self.extract_parentUid(element),
+                    element['lastModifiedDateTime']
                 )
     
     def map_element_to_page(self, element):
@@ -211,7 +214,8 @@ class OneNoteSyncSpider(scrapy.Spider):
                     "icons/page.png",
                     "file",
                     types.OneNoteType.PAGE,
-                    self.extract_parentUid(element)
+                    self.extract_parentUid(element),
+                    element['lastModifiedDateTime']
                 )
 
     def update_modified_element(self, elementOnenoteType, element):

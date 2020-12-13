@@ -12,7 +12,7 @@ class OneNoteType(str, Enum):
 
 
 class OneNoteElement(object):
-    def __init__(self, title, autocomplete, uid, subtitle, arg, icon, icontype, onenoteType, parentUid):
+    def __init__(self, title, autocomplete, uid, subtitle, arg, icon, icontype, onenoteType, parentUid, lastModifiedDateTime):
       self.title = title
       self.autocomplete = autocomplete
       self.uid = uid
@@ -22,6 +22,7 @@ class OneNoteElement(object):
       self.icontype = icontype
       self.onenoteType = onenoteType
       self.parentUid = parentUid
+      self.lastModifiedDateTime = lastModifiedDateTime
 
 def as_onenoteelement(data):
-    return OneNoteElement(data['title'], data['autocomplete'], data['uid'], data['subtitle'], data['arg'], data['icon'], data['icontype'], data['onenoteType'], data['parentUid'])
+    return OneNoteElement(data['title'], data['autocomplete'], data['uid'], data['subtitle'], data['arg'], data['icon'], data['icontype'], data['onenoteType'], data['parentUid'], data['lastModifiedDateTime'])
