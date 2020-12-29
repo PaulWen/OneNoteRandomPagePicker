@@ -18,7 +18,6 @@ PAGE_CONTENT_FOLDER = "./page-content/"
 CRAWLER_CONFIG = {
     'USER_AGENT': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)',
     'FEED_FORMAT': 'json',
-    'FEED_URI': 'result.json',
     'CONCURRENT_REQUESTS_PER_DOMAIN': 4,
     'RETRY_HTTP_CODES': [401, 429],
     # 'CLOSESPIDER_PAGECOUNT': 10,

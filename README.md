@@ -76,8 +76,10 @@ pip3 install -r requirements.txt
 
 ### Step 3: Configure the app
 
-Ensure that your config.json is correct and saved. A sample config.json can be found
-[here](./config.json.example).
+1. Ensure that your config.json is correct and saved. A sample config.json can be found
+   [here](./config.json.example).
+1. create an empty [lastSyncDate.txt](./lastSyncDate.txt) file
+1. create a [onenoteElements.json](./onenoteElements.json) file with the following content `[]`
 
 ### Step 4: Run the app
 

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import os
-from typing import Set
 
 import scrapy
 
@@ -13,8 +12,7 @@ class OneNotePageContentSpider(scrapy.Spider):
     This spider scrapes all the content of the pages and stores them it html files.
     """
 
-    def __init__(self, modified_pages_uids: Set[str], download_folder_path: str, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, modified_pages_uids: set(), download_folder_path: str):
         self.name = 'OneNotePageContentSpider'
         self.allowed_domains = ['graph.microsoft.com']
         self.modifiedPagesUids = modified_pages_uids
