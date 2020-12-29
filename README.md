@@ -1,17 +1,34 @@
-# Python app to open a random OneNote page
+# Python App to Scrape OneNote Data
 
 ## Overview
 
 This app uses the [Microsoft identity platform endpoint](http://aka.ms/aadv2) to access the data of Microsoft customers.
 The [device code flow](https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-device-code)
-is used to authenticate a user and then call to a web api, in this case,
-the [Microsoft Graph](https://graph.microsoft.io) to retrieve OneNote data.
+is used to authenticate a user. Afterward, the [Microsoft Graph Web API](https://graph.microsoft.io) is used to retrieve
+OneNote data.
+
+#### This application does the following things:
+
+1. create a list of all OneNote elements (notebooks, section groups, sections, pages) with their title and URL to open
+   the element locally
+1. for each page it downloads the content as an HTML file
+1. if the application is rerun it will only scrape the elements that have been changed since the last sync based on the
+   timestamp stored in [lastSyncDate.txt](./lastSyncDate.txt)
+
+## Limitations
+
+The Microsoft Graph API is [limited](https://docs.microsoft.com/en-us/graph/throttling#onenote-service-limits) to 120
+requests a minute and 400 requests an hour. To meet those limitations this application does:
+
+- **wait for 60 seconds** in case a `429 - Too many requests` is thrown
+- **wait for 60 minutes** if the last `429 - Too many requests` has been thrown during the last 70 seconds
+- **retrieve a new OAuth Token** if a `401 - Unauthorized` error is thrown
 
 ## Setup
 
 To run this sample, you'll need:
 
-> - [Python 2.7+](https://www.python.org/downloads/release/python-2713/) or [Python 3+](https://www.python.org/downloads/release/python-364/)
+> - [Python 3+](https://www.python.org/downloads/release/python-364/)
 > - An Azure Active Directory (Azure AD) tenant. For more information on how to get an Azure AD tenant, see [how to get an Azure AD tenant.](https://docs.microsoft.com/azure/active-directory/develop/quickstart-create-new-tenant)
 
 ### Step 1: Register the sample with your Azure Active Directory tenant
@@ -84,3 +101,4 @@ Add `'CLOSESPIDER_PAGECOUNT': 10` to the `CrawlerProcess` configuration in
     - the file `onenoteElements.json` can not be empty but at least has to include "[]"
 - the file `lastSyncDate.txt` stores the datetime of the last sync with OneNote
     - if this file is empty, all data will be synced
+- the folder `./page-content` will include all the downloaded OneNote pages as HTML pages 
