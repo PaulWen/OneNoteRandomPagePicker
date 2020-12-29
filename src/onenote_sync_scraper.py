@@ -228,7 +228,8 @@ class OneNoteSyncSpider(scrapy.Spider):
             "file",
             types.OneNoteType.PAGE,
             self.extract_parentUid(element),
-            element['lastModifiedDateTime']
+            element['lastModifiedDateTime'],
+            self.extract_title(element['parentSection']) + " " + self.extract_title(element)
         )
 
     def update_modified_element(self, elementOnenoteType, element):
