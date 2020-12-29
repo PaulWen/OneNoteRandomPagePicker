@@ -69,7 +69,7 @@ with will display in the console.
 
 ```Shell
 python ./src/main.py config.json
-```
+``` 
 
 ## Debug
 

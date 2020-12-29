@@ -1,46 +1,45 @@
 # -*- coding: utf-8 -*-
-import json
 import os
-import time
-from datetime import datetime
+from typing import Set
 
 import scrapy
-from scrapy.downloadermiddlewares.retry import RetryMiddleware
-from scrapy.utils.response import response_status_message
 
+import auth_token_request as req
 import onenote_types as types
 
-'''
-This spider scrapes all the content of the pages and stores them it html files.
-'''
-class OneNotePageContentSpider(scrapy.Spider):
 
-    def __init__(self, accessToken, modifiedPagesUids: set(), downloadFolderPath: str):
+class OneNotePageContentSpider(scrapy.Spider):
+    """
+    This spider scrapes all the content of the pages and stores them it html files.
+    """
+
+    def __init__(self, modified_pages_uids: Set[str], download_folder_path: str, **kwargs):
+        super().__init__(**kwargs)
         self.name = 'OneNotePageContentSpider'
         self.allowed_domains = ['graph.microsoft.com']
-        self.accessToken = accessToken
-        self.modifiedPagesUids = modifiedPagesUids
-        self.downloadFolderPath = downloadFolderPath
+        self.modifiedPagesUids = modified_pages_uids
+        self.downloadFolderPath = download_folder_path
 
     def start_requests(self):
         for modifiedPageUid in self.modifiedPagesUids:
-            yield scrapy.Request(meta={types.PAGE_UID_KEY: modifiedPageUid}, url='https://graph.microsoft.com/v1.0/users/me/onenote/pages/' + modifiedPageUid + '/content', method="GET",
-                                headers={"Authorization": "Bearer " + self.accessToken}, callback=self.parse_page_content)
+            yield req.AuthTokenRequest(meta={types.PAGE_UID_KEY: modifiedPageUid},
+                                       url='https://graph.microsoft.com/v1.0/users/me/onenote/pages/' + modifiedPageUid + '/content',
+                                       method="GET", callback=self.parse_page_content)
 
-    '''
-    Is used to parse page content and store it in a file.
-    '''
     def parse_page_content(self, response):
+        """
+        Is used to parse page content and store it in a file.
+        """
         pageUid = response.meta[types.PAGE_UID_KEY]
         pageContent = response.text
 
         self.store_page_content_in_file(pageUid, pageContent)
 
-    '''
-    Stores content in an HTML file
-    '''
     def store_page_content_in_file(self, pageUid, data):
-        file_path = self.downloadFolderPath + pageUid + ".html" 
+        """
+        Stores content in an HTML file
+        """
+        file_path = self.downloadFolderPath + pageUid + ".html"
 
         if not os.path.isdir(self.downloadFolderPath):
             os.mkdir(self.downloadFolderPath)
