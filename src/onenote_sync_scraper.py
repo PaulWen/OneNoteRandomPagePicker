@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
+import re
 from datetime import datetime
 
 import scrapy
@@ -15,14 +16,15 @@ class OneNoteSyncSpider(scrapy.Spider):
     exist, this spider will only load those elements again that changed since the last sync.
     """
 
-    def __init__(self, alfredDataDictionary: {str, types.OneNoteElement}, alfredParentChildDictionary: {str, (str)},
-                 lastSyncDate, pagesModified: set(), pagesDeleted: set()):
+    def __init__(self, alfred_data_dictionary: {str, types.OneNoteElement}, lastSyncDate, pagesModified: set(),
+                 pagesDeleted: set()):
         self.name = 'OneNoteSyncSpider'
         self.allowed_domains = ['graph.microsoft.com']
         self.lastSyncDate = lastSyncDate if type(lastSyncDate) is datetime else datetime.strptime(
             '2000-01-01T00:00:00.000Z', "%Y-%m-%dT%H:%M:%S.%f%z")
-        self.alfredDataDictionary = alfredDataDictionary
-        self.alfredParentChildDictionary = alfredParentChildDictionary
+        self.alfred_data_dictionary = alfred_data_dictionary
+        self.alfred_parent_child_dictionary: {str, (str)} = self.genarateParentChildDictionaryFromDictionary(
+            self.alfred_data_dictionary)
         self.pagesModified = pagesModified
         self.pagesDeleted = pagesDeleted
         self.baseUrl = "https://graph.microsoft.com"
@@ -39,6 +41,14 @@ class OneNoteSyncSpider(scrapy.Spider):
         yield req.AuthTokenRequest(meta={types.ONENOTE_TYPE_KEY: types.OneNoteType.SECTION},
                                    url=self.baseUrl + '/v1.0/me/onenote/sections', method="GET",
                                    callback=self.parse_onenote_elements)
+
+    def closed(self, reason):
+        alfred_parent_child_dictionary = self.genarateParentChildDictionaryFromDictionary(self.alfred_data_dictionary)
+
+        self.add_page_urls_to_elements_without_url(self.alfred_data_dictionary,
+                                                   alfred_parent_child_dictionary)
+
+        self.add_subtitle_and_match_string_to_elements(self.alfred_data_dictionary)
 
     def parse_onenote_elements(self, response):
         """
@@ -89,7 +99,7 @@ class OneNoteSyncSpider(scrapy.Spider):
         for page in pages:
             pagesUids.add(page["id"])
 
-        pastChildrenUids = self.alfredParentChildDictionary[sectionUid] if None else set()
+        pastChildrenUids = self.alfred_parent_child_dictionary[sectionUid] if None else set()
 
         deletedElements = pastChildrenUids - pagesUids
 
@@ -109,7 +119,7 @@ class OneNoteSyncSpider(scrapy.Spider):
             elementUids.add(element["id"])
 
         pastElementUids = set()
-        for pastElement in self.alfredDataDictionary.values():
+        for pastElement in self.alfred_data_dictionary.values():
             if pastElement.onenoteType == onenoteType:
                 pastElementUids.add(pastElement.uid)
 
@@ -186,7 +196,8 @@ class OneNoteSyncSpider(scrapy.Spider):
             "file",
             types.OneNoteType.NOTEBOOK,
             None,
-            element['lastModifiedDateTime']
+            element['lastModifiedDateTime'],
+            None
         )
 
     def map_element_to_section_group(self, element):
@@ -200,7 +211,8 @@ class OneNoteSyncSpider(scrapy.Spider):
             "file",
             types.OneNoteType.SECTION_GROUP,
             self.extract_parentUid(element),
-            element['lastModifiedDateTime']
+            element['lastModifiedDateTime'],
+            None
         )
 
     def map_element_to_section(self, element):
@@ -214,7 +226,8 @@ class OneNoteSyncSpider(scrapy.Spider):
             "file",
             types.OneNoteType.SECTION,
             self.extract_parentUid(element),
-            element['lastModifiedDateTime']
+            element['lastModifiedDateTime'],
+            None
         )
 
     def map_element_to_page(self, element):
@@ -229,20 +242,20 @@ class OneNoteSyncSpider(scrapy.Spider):
             types.OneNoteType.PAGE,
             self.extract_parentUid(element),
             element['lastModifiedDateTime'],
-            self.extract_title(element['parentSection']) + " " + self.extract_title(element)
+            None
         )
 
     def update_modified_element(self, elementOnenoteType, element):
         elementMapped = self.map_element(elementOnenoteType, element)
-        self.alfredDataDictionary[elementMapped.uid] = elementMapped
+        self.alfred_data_dictionary[elementMapped.uid] = elementMapped
 
     def delete_recursively(self, uids: [str]):
         for uid in uids:
-            if uid in self.alfredParentChildDictionary:
-                children = self.alfredParentChildDictionary[uid]
+            if uid in self.alfred_parent_child_dictionary:
+                children = self.alfred_parent_child_dictionary[uid]
                 self.delete_recursively(children)
-            if uid in self.alfredDataDictionary:
-                del self.alfredDataDictionary[uid]
+            if uid in self.alfred_data_dictionary:
+                del self.alfred_data_dictionary[uid]
 
     def parse_datetime(self, datetimeString: str):
         try:
@@ -279,3 +292,65 @@ class OneNoteSyncSpider(scrapy.Spider):
             return element['links']['oneNoteClientUrl']['href']
 
         return element['links']['oneNoteClientUrl']
+
+    def genarateParentChildDictionaryFromDictionary(self, alfredDataDictionary: {str, types.OneNoteElement}):
+        alfredParentChildDictionary = {}
+
+        for element in alfredDataDictionary:
+            element = alfredDataDictionary[element]
+
+            if element.parentUid == None:
+                continue
+
+            if element.parentUid not in alfredParentChildDictionary:
+                alfredParentChildDictionary[element.parentUid] = []
+
+            alfredParentChildDictionary[element.parentUid].append(element.uid)
+
+        return alfredParentChildDictionary
+
+    def recursively_find_url_of_first_child_page(self, element: types.OneNoteElement, alfredDataDictionary,
+                                                 alfredParentChildDictionary):
+        if (element.onenoteType == types.OneNoteType.PAGE):
+            return element.arg
+
+        if (element.uid in alfredParentChildDictionary):
+            childElement = alfredDataDictionary[alfredParentChildDictionary[element.uid][0]]
+            return self.recursively_find_url_of_first_child_page(childElement, alfredDataDictionary,
+                                                                 alfredParentChildDictionary)
+
+        return None
+
+    def recursively_generate_subtitle(self, element: types.OneNoteElement, alfredDataDictionary):
+        if (element.onenoteType == types.OneNoteType.NOTEBOOK):
+            return element.title
+
+        return self.recursively_generate_subtitle(alfredDataDictionary[element.parentUid],
+                                                  alfredDataDictionary) + " > " + element.title
+
+    def add_page_urls_to_elements_without_url(self, alfredDataDictionary,
+                                              alfredParentChildDictionary):
+        for uid in alfredDataDictionary.keys():
+            element: types.OneNoteElement = alfredDataDictionary[uid]
+            if (element.arg == None):
+                pageUrl = self.recursively_find_url_of_first_child_page(element, alfredDataDictionary,
+                                                                        alfredParentChildDictionary)
+
+                if (pageUrl != None):
+                    sectionUrl = re.sub(r'page-id=.*&', '', pageUrl)
+                    element.arg = sectionUrl
+
+    def add_subtitle_and_match_string_to_elements(self, alfredDataDictionary):
+        for uid in alfredDataDictionary.keys():
+            element: types.OneNoteElement = alfredDataDictionary[uid]
+
+            if (element.onenoteType == types.OneNoteType.NOTEBOOK):
+                element.subtitle = "Notebook"
+                element.match = element.title
+                continue
+
+            subtitle = self.recursively_generate_subtitle(alfredDataDictionary[element.parentUid], alfredDataDictionary)
+            subtitle = subtitle.replace("--", "")
+
+            element.subtitle = subtitle
+            element.match = subtitle + " > " + element.title

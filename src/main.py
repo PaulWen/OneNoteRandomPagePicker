@@ -1,6 +1,5 @@
 import json
 import os
-import re
 from datetime import datetime
 
 from scrapy.crawler import CrawlerRunner
@@ -29,15 +28,6 @@ CRAWLER_CONFIG = {
 }
 
 
-def genarateDictionaryFromList(allAlfredData: [types.OneNoteElement]):
-    alfredDictionaryData = {}
-
-    for element in allAlfredData:
-        alfredDictionaryData[element.uid] = element
-
-    return alfredDictionaryData
-
-
 def genarateListFromDictionary(allAlfredDataDictionary: {types.OneNoteElement}):
     allAlfredListData = []
 
@@ -47,21 +37,13 @@ def genarateListFromDictionary(allAlfredDataDictionary: {types.OneNoteElement}):
     return allAlfredListData
 
 
-def genarateParentChildDictionaryFromDictionary(alfredDataDictionary: {str, types.OneNoteElement}):
-    alfredParentChildDictionary = {}
+def genarateDictionaryFromList(allAlfredData: [types.OneNoteElement]):
+    alfredDictionaryData = {}
 
-    for element in alfredDataDictionary:
-        element = alfredDataDictionary[element]
+    for element in allAlfredData:
+        alfredDictionaryData[element.uid] = element
 
-        if element.parentUid == None:
-            continue
-
-        if element.parentUid not in alfredParentChildDictionary:
-            alfredParentChildDictionary[element.parentUid] = []
-
-        alfredParentChildDictionary[element.parentUid].append(element.uid)
-
-    return alfredParentChildDictionary
+    return alfredDictionaryData
 
 
 def load_alfred_data_from_file(file_path: str):
@@ -96,30 +78,6 @@ def store_last_sync_date_in_file(file_path: str, date: str):
         file.write(date)
 
 
-def recursively_find_url_of_first_child_page(element: types.OneNoteElement, alfredDataDictionary,
-                                             alfredParentChildDictionary):
-    if (element.onenoteType == types.OneNoteType.PAGE):
-        return element.arg
-
-    if (element.uid in alfredParentChildDictionary):
-        childElement = alfredDataDictionary[alfredParentChildDictionary[element.uid][0]]
-        return recursively_find_url_of_first_child_page(childElement, alfredDataDictionary, alfredParentChildDictionary)
-
-    return None
-
-
-def add_page_urls_to_elements_without_url(allAlfredDataList: [types.OneNoteElement], alfredDataDictionary,
-                                          alfredParentChildDictionary):
-    for element in allAlfredDataList:
-        if (element.arg == None):
-            pageUrl = recursively_find_url_of_first_child_page(element, alfredDataDictionary,
-                                                               alfredParentChildDictionary)
-
-            if (pageUrl != None):
-                sectionUrl = re.sub(r'page-id=.*&', '', pageUrl)
-                element.arg = sectionUrl
-
-
 def delete_pages(pagesUids):
     for pageUid in pagesUids:
         filePath = PAGE_CONTENT_FOLDER + pageUid + ".html"
@@ -129,8 +87,7 @@ def delete_pages(pagesUids):
 
 def main():
     all_alfred_data = load_alfred_data_from_file(ONENOTE_ELEMENTS_FILE)
-    alfred_data_dictionary = genarateDictionaryFromList(all_alfred_data)
-    alfred_parent_child_dictionary = genarateParentChildDictionaryFromDictionary(alfred_data_dictionary)
+    alfred_data_dictionary: {str, types.OneNoteElement} = genarateDictionaryFromList(all_alfred_data)
 
     pages_deleted = set()
     pages_modified = set()
@@ -143,7 +100,7 @@ def main():
 
     @defer.inlineCallbacks
     def crawl():
-        yield scrapyRunner.crawl(sync_scraper.OneNoteSyncSpider, alfred_data_dictionary, alfred_parent_child_dictionary,
+        yield scrapyRunner.crawl(sync_scraper.OneNoteSyncSpider, alfred_data_dictionary,
                                  lastSyncDate, pages_modified, pages_deleted)
         yield scrapyRunner.crawl(page_content_scraper.OneNotePageContentSpider, pages_modified, PAGE_CONTENT_FOLDER)
         reactor.stop()
@@ -151,11 +108,7 @@ def main():
     crawl()
     reactor.run()  # the script will block here until the crawling is finished
 
-    alfred_parent_child_dictionary = genarateParentChildDictionaryFromDictionary(alfred_data_dictionary)
     allAlfredDataList = genarateListFromDictionary(alfred_data_dictionary)
-
-    add_page_urls_to_elements_without_url(allAlfredDataList, alfred_data_dictionary, alfred_parent_child_dictionary)
-
     store_alfred_data_in_file(ONENOTE_ELEMENTS_FILE, allAlfredDataList)
     store_last_sync_date_in_file(LAST_SYNC_DATE_FILE, thisSyncDate)
 
