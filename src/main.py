@@ -102,7 +102,8 @@ def main():
     def crawl():
         yield scrapyRunner.crawl(sync_scraper.OneNoteSyncSpider, alfred_data_dictionary,
                                  lastSyncDate, pages_modified, pages_deleted)
-        yield scrapyRunner.crawl(page_content_scraper.OneNotePageContentSpider, pages_modified, PAGE_CONTENT_FOLDER)
+        yield scrapyRunner.crawl(page_content_scraper.OneNotePageContentSpider, pages_modified, PAGE_CONTENT_FOLDER,
+                                 alfred_data_dictionary)
         reactor.stop()
 
     crawl()
