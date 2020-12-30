@@ -88,6 +88,11 @@ class OneNoteSyncSpider(scrapy.Spider):
             self.pagesModified.add(page['id'])
             self.update_modified_element(types.OneNoteType.PAGE, page)
 
+        if "@odata.nextLink" in json.loads(response.text):
+            yield req.AuthTokenRequest(meta={types.PARENT_UID_KEY: sectionUid},
+                                       url=json.loads(response.text)["@odata.nextLink"], method="GET",
+                                       callback=self.parse_onenote_pages)
+
     def identify_deleted_pages_uids(self, sectionUid, pages):
         """
         This function detects all the deleted pages of a section.
