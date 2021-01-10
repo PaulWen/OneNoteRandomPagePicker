@@ -1,6 +1,7 @@
 from enum import Enum
 
 PARENT_UID_KEY = "parentUid"
+PAGES_OF_SAME_SECTION_ALREADY_LOADED = "pagesOfSameSectionAlreadyLoaded"
 PAGE_UID_KEY = "pageUid"
 ONENOTE_TYPE_KEY = "onenoteType"
 NOTEBOOKS_KEY = "notebooks"

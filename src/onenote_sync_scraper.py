@@ -74,13 +74,9 @@ class OneNoteSyncSpider(scrapy.Spider):
         """
         Is used to parse a list of onenote pages. The function syncs the data with the current set of data.
         """
-
-        sectionUid = response.meta[types.PARENT_UID_KEY],
+        sectionUid = response.meta[types.PARENT_UID_KEY]
+        pagesOfSameSectionAlreadyLoaded = response.meta[types.PAGES_OF_SAME_SECTION_ALREADY_LOADED]
         pages = json.loads(response.text)["value"]
-
-        deletedPagesUids = self.identify_deleted_pages_uids(sectionUid, pages)
-        self.pagesDeleted.update(deletedPagesUids)
-        self.delete_recursively(deletedPagesUids)
 
         modifiedPages = self.identify_modified_elements(pages)
 
@@ -89,26 +85,31 @@ class OneNoteSyncSpider(scrapy.Spider):
             self.update_modified_element(types.OneNoteType.PAGE, page)
 
         if "@odata.nextLink" in json.loads(response.text):
-            yield req.AuthTokenRequest(meta={types.PARENT_UID_KEY: sectionUid},
+            yield req.AuthTokenRequest(meta={types.PARENT_UID_KEY: sectionUid,
+                                             types.PAGES_OF_SAME_SECTION_ALREADY_LOADED: pagesOfSameSectionAlreadyLoaded + pages},
                                        url=json.loads(response.text)["@odata.nextLink"], method="GET",
                                        callback=self.parse_onenote_pages)
+
+        if "@odata.nextLink" not in json.loads(response.text):
+            deletedPagesUids = self.identify_deleted_pages_uids(sectionUid, pagesOfSameSectionAlreadyLoaded + pages)
+            self.delete_recursively(deletedPagesUids)
 
     def identify_deleted_pages_uids(self, sectionUid, pages):
         """
         This function detects all the deleted pages of a section.
-        For this to work, it is expacted that the list of pages includes all the pages
+        For this to work, it is expected that the list of pages includes all the pages
         the section currently has.
         """
-
         pagesUids = set()
         for page in pages:
             pagesUids.add(page["id"])
 
-        pastChildrenUids = self.alfred_parent_child_dictionary[sectionUid] if None else set()
+        pastChildrenUids = self.alfred_parent_child_dictionary[
+            sectionUid] if sectionUid in self.alfred_parent_child_dictionary else set()
 
-        deletedElements = pastChildrenUids - pagesUids
+        deletedPages = pastChildrenUids - pagesUids
 
-        return deletedElements
+        return deletedPages
 
     def identify_deleted_elements_uids(self, onenoteType, elements):
         """
@@ -118,7 +119,6 @@ class OneNoteSyncSpider(scrapy.Spider):
 
         This function is used to detected deleted notebooks section groups and sections.
         """
-
         elementUids = set()
         for element in elements:
             elementUids.add(element["id"])
@@ -174,8 +174,10 @@ class OneNoteSyncSpider(scrapy.Spider):
         """
 
         if "pagesUrl" in parent:
-            return req.AuthTokenRequest(meta={types.PARENT_UID_KEY: parent["id"]}, url=parent["pagesUrl"], method="GET",
-                                        callback=self.parse_onenote_pages)
+            return req.AuthTokenRequest(
+                meta={types.PARENT_UID_KEY: parent["id"], types.PAGES_OF_SAME_SECTION_ALREADY_LOADED: []},
+                url=parent["pagesUrl"], method="GET",
+                callback=self.parse_onenote_pages)
 
     def map_element(self, elementType: types.OneNoteType, element):
         if elementType == types.OneNoteType.NOTEBOOK:
@@ -259,6 +261,11 @@ class OneNoteSyncSpider(scrapy.Spider):
             if uid in self.alfred_parent_child_dictionary:
                 children = self.alfred_parent_child_dictionary[uid]
                 self.delete_recursively(children)
+
+            if uid in self.alfred_data_dictionary and self.alfred_data_dictionary[
+                uid].onenoteType == types.OneNoteType.PAGE:
+                self.pagesDeleted.add(uid)
+
             if uid in self.alfred_data_dictionary:
                 del self.alfred_data_dictionary[uid]
 
@@ -308,9 +315,9 @@ class OneNoteSyncSpider(scrapy.Spider):
                 continue
 
             if element.parentUid not in alfredParentChildDictionary:
-                alfredParentChildDictionary[element.parentUid] = []
+                alfredParentChildDictionary[element.parentUid] = set()
 
-            alfredParentChildDictionary[element.parentUid].append(element.uid)
+            alfredParentChildDictionary[element.parentUid].add(element.uid)
 
         return alfredParentChildDictionary
 
@@ -320,7 +327,7 @@ class OneNoteSyncSpider(scrapy.Spider):
             return element.arg
 
         if (element.uid in alfredParentChildDictionary):
-            childElement = alfredDataDictionary[alfredParentChildDictionary[element.uid][0]]
+            childElement = alfredDataDictionary[list(alfredParentChildDictionary[element.uid])[0]]
             return self.recursively_find_url_of_first_child_page(childElement, alfredDataDictionary,
                                                                  alfredParentChildDictionary)
 

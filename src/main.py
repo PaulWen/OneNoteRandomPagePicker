@@ -67,6 +67,8 @@ def load_last_sync_date_from_file(file_path: str):
 
     with open(file_path, "r") as file:
         lastSyncDate = file.read()
+        lastSyncDate = lastSyncDate.strip()
+
         if lastSyncDate:
             lastSyncDate = datetime.strptime(str(lastSyncDate), '%Y-%m-%dT%H:%M:%S.%f%z')
 
